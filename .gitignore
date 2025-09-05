@@ -17,7 +17,7 @@ model_Deployment_*/
 .ipynb_checkpoints
 
 # Streamlit secrets
-.streamlit
+.streamlit/secrets.toml
 
 # Logs
 *.log
