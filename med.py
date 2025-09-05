@@ -1,70 +1,92 @@
+import os
+from PIL import Image as PILImage
 import streamlit as st
 from agno.agent import Agent
-from agno.models.google import Gemini
+from agno.models.gemini import Gemini
 from agno.tools.duckduckgo import DuckDuckGoTools
-from PIL import Image
-import io
+from agno.media import Image as AgnoImage
 
-# ------------------- Streamlit Page Setup -------------------
-st.set_page_config(page_title="🧠 Medical AI", layout="centered")
+st.set_page_config(page_title="🧠 Medical Image Analysis AI", layout="centered")
+
 st.title("🧠 Medical Image Analysis AI")
 st.write("📂 Upload a medical image and let AI analyze it.")
 
-# ------------------- API Key Setup -------------------
-agent = None
-if "GOOGLE_API_KEY" in st.secrets:
-    try:
-        model = Gemini(id="gemini-1.5-flash", api_key=st.secrets["GOOGLE_API_KEY"])
-        agent = Agent(model=model, tools=[DuckDuckGoTools()])
-    except Exception as e:
-        st.error(f"❌ Model initialization failed: {e}")
-else:
-    st.warning("⚠️ Please add your GOOGLE_API_KEY in `secrets.toml`")
+# ✅ Load API key from secrets.toml
+GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", None)
 
-# ------------------- File Upload -------------------
+# Initialize agent
+medical_agent = None
+if GOOGLE_API_KEY:
+    medical_agent = Agent(
+        model=Gemini(id="gemini-2.0-flash", api_key=GOOGLE_API_KEY),
+        tools=[DuckDuckGoTools()],
+        markdown=True
+    )
+else:
+    st.warning("⚠️ Please add your GOOGLE_API_KEY in .streamlit/secrets.toml")
+
+# Analysis instructions
+query = """
+You are a highly skilled medical imaging expert. Analyze the patient's medical image and structure your response as follows:
+
+### 1. Image Type & Region
+- Modality (X-ray/MRI/CT/Ultrasound/etc.)
+- Anatomical region and positioning
+- Image quality & adequacy
+
+### 2. Key Findings
+- Primary observations
+- Abnormalities with precise descriptions
+- Location, size, shape, severity
+
+### 3. Diagnostic Assessment
+- Primary diagnosis (with confidence)
+- Differential diagnoses
+- Critical findings
+
+### 4. Patient-Friendly Explanation
+- Simplified explanation
+- Avoid jargon
+- Visual analogies if helpful
+
+### 5. Research Context
+- Recent medical literature (DuckDuckGo)
+- Standard treatment protocols
+- Key references with links
+"""
+
+# File uploader
 uploaded_file = st.file_uploader(
     "Upload Medical Image",
     type=["jpg", "jpeg", "png", "dcm"],
     help="Supported formats: JPG, JPEG, PNG, DICOM"
 )
 
-# ------------------- Image Display -------------------
-if uploaded_file is not None:
-    try:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Medical Image", use_container_width=True)
-    except Exception as e:
-        st.error(f"⚠️ Error loading image: {e}")
+if uploaded_file:
+    # Display uploaded image
+    image = PILImage.open(uploaded_file)
+    st.image(image, caption="Uploaded Medical Image", use_container_width=True)
 
-    # ------------------- Analysis Button -------------------
-    if st.button("🔍 Analyze Image"):
-        if agent is None:
+    analyze_button = st.button("🔍 Analyze Image")
+
+    if analyze_button:
+        if not medical_agent:
             st.error("❌ Agent not initialized. Check your API key and imports.")
         else:
-            try:
-                # Convert image to bytes for Gemini
-                img_bytes = io.BytesIO()
-                image.save(img_bytes, format="PNG")
-                img_bytes = img_bytes.getvalue()
+            with st.spinner("Analyzing image... Please wait."):
+                try:
+                    temp_path = "temp_resized_image.png"
+                    image.save(temp_path)
 
-                # Query prompt
-                query = """
-                You are a highly skilled medical imaging expert. 
-                Analyze this uploaded scan and provide:
-                1. Image type & region
-                2. Key findings (normal/abnormal observations)
-                3. Possible diagnoses with confidence levels
-                4. Patient-friendly explanation
-                5. Recent research context (use DuckDuckGo search)
-                """
+                    agno_image = AgnoImage(filepath=temp_path)
+                    response = medical_agent.run(query, images=[agno_image])
 
-                # Run analysis
-                response = agent.run(query, images=[img_bytes])
-
-                # Show result
-                st.markdown("### 📋 Analysis Results")
-                st.write(response)
-
-            except Exception as e:
-                st.error(f"⚠️ Analysis failed: {e}")
-
+                    st.subheader("📋 Analysis Results")
+                    st.markdown(response.content)
+                    st.caption(
+                        "⚠️ Disclaimer: This analysis is AI-generated and should be reviewed by a qualified healthcare professional."
+                    )
+                except Exception as e:
+                    st.error(f"Analysis error: {e}")
+else:
+    st.info("👆 Upload an image to begin analysis")
