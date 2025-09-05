@@ -5,5 +5,7 @@ google-genai>=0.3.0
 ddgs>=1.0.5
 agno
 google-genai
-ddgs
+streamlit
 pillow
+google-generativeai
+
