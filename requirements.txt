@@ -3,3 +3,7 @@ pillow>=10.3.0
 agno>=0.2.0
 google-genai>=0.3.0
 ddgs>=1.0.5
+agno
+google-genai
+ddgs
+pillow
