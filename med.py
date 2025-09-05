@@ -19,7 +19,7 @@ if "GOOGLE_API_KEY" in st.secrets:
     except Exception as e:
         st.error(f"❌ Model initialization failed: {e}")
 else:
-    st.warning("⚠️ Please add your GOOGLE_API_KEY in `.streamlit/secrets.toml`")
+    st.warning("⚠️ Please add your GOOGLE_API_KEY in `secrets.toml`")
 
 # ------------------- File Upload -------------------
 uploaded_file = st.file_uploader(
@@ -67,3 +67,4 @@ if uploaded_file is not None:
 
             except Exception as e:
                 st.error(f"⚠️ Analysis failed: {e}")
+
