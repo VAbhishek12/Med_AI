@@ -1,106 +1,54 @@
 import streamlit as st
-from PIL import Image
-import os
 from agno.agent import Agent
-from agno.models.gemini import Gemini
+from agno.models.google import Gemini   # ✅ Correct import
 from agno.tools.duckduckgo import DuckDuckGoTools
-from agno.media import Image as AgnoImage
+from PIL import Image
+import io
 
-# ---------------------------
-# Streamlit UI Config
-# ---------------------------
-st.set_page_config(
-    page_title="🧠 AI Medical Q&A Chatbot",
-    layout="wide",
-    page_icon="🧠",
+# Set Streamlit page config
+st.set_page_config(page_title="Medical AI", layout="centered")
+
+st.title("🧠 Medical Image Analysis AI")
+
+# Upload section
+uploaded_file = st.file_uploader(
+    "📂 Upload Medical Image", 
+    type=["jpg", "jpeg", "png", "dcm"]
 )
 
-# ---------------------------
-# Sidebar - API Key Input
-# ---------------------------
-with st.sidebar:
-    st.title("⚙️ Settings")
-    api_key = st.text_input(
-        "Enter your Google API Key",
-        type="password",
-        help="You can get your Gemini API key from Google AI Studio"
-    )
-    if api_key:
-        st.session_state.GOOGLE_API_KEY = api_key
+# Initialize Gemini model (make sure GOOGLE_API_KEY is set in Streamlit secrets)
+try:
+    model = Gemini(id="gemini-1.5-flash", api_key=st.secrets["GOOGLE_API_KEY"])
+    agent = Agent(model=model, tools=[DuckDuckGoTools()])
+except Exception as e:
+    st.error(f"Model initialization failed: {e}")
+    agent = None
 
-# ---------------------------
-# Initialize Medical Agent
-# ---------------------------
-medical_agent = None
-if "GOOGLE_API_KEY" in st.session_state and st.session_state.GOOGLE_API_KEY:
+# If file is uploaded
+if uploaded_file is not None:
     try:
-        medical_agent = Agent(
-            model=Gemini(
-                id="gemini-2.0-flash",
-                api_key=st.session_state.GOOGLE_API_KEY
-            ),
-            tools=[DuckDuckGoTools()],
-            markdown=True
-        )
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Uploaded Medical Image", use_column_width=True)
     except Exception as e:
-        st.error(f"⚠️ Could not initialize Gemini agent: {e}")
-else:
-    st.warning("Please enter your Google API Key in the sidebar to enable analysis.")
+        st.error(f"Error opening image: {e}")
 
-# ---------------------------
-# Main Title
-# ---------------------------
-st.title("🧠 AI-Powered Medical Image Q&A Chatbot")
-st.markdown("Upload a medical image and ask a question to get AI-powered insights. ⚕️")
+    if st.button("🔍 Analyze Image"):
+        if agent is None:
+            st.error("Agent not initialized. Check your API key and imports.")
+        else:
+            try:
+                # Convert image to bytes
+                img_bytes = io.BytesIO()
+                image.save(img_bytes, format="PNG")
+                img_bytes = img_bytes.getvalue()
 
-# ---------------------------
-# Image Upload
-# ---------------------------
-uploaded_file = st.file_uploader("📤 Upload a medical image", type=["jpg", "jpeg", "png"])
+                # Ask Gemini to analyze the image
+                response = agent.run(
+                    f"Analyze this medical scan image and provide possible findings.",
+                    images=[img_bytes]
+                )
+                st.success("✅ Analysis Complete")
+                st.write(response)
 
-if uploaded_file:
-    image = Image.open(uploaded_file)
-
-    # Resize image for display
-    base_width = 500
-    w_percent = base_width / float(image.size[0])
-    h_size = int(float(image.size[1]) * float(w_percent))
-    resized_image = image.resize((base_width, h_size))
-
-    # Show uploaded image
-    st.image(resized_image, caption="🩻 Uploaded Medical Image", use_column_width=True)
-
-    # ---------------------------
-    # User Query Input
-    # ---------------------------
-    query = st.text_area("💬 Ask a question about this image:", placeholder="E.g., What abnormalities can you detect?")
-    analyze_button = st.button("🔍 Analyze")
-
-    if analyze_button:
-        with st.spinner("🔄 Analyzing image... Please wait."):
-            if not medical_agent:
-                st.error("❌ No medical agent available. Please check your API Key in the sidebar.")
-            else:
-                try:
-                    # Save resized image temporarily
-                    temp_path = "temp_resized_image.png"
-                    resized_image.save(temp_path)
-
-                    # Convert to Agno format
-                    agno_image = AgnoImage(filepath=temp_path)
-
-                    # Run analysis
-                    response = medical_agent.run(query, images=[agno_image])
-
-                    # Display results
-                    st.markdown("### 📋 Analysis Results")
-                    st.markdown("---")
-                    st.markdown(response.content)
-                    st.markdown("---")
-                    st.caption("⚠️ Note: This analysis is generated by AI and should be reviewed by a qualified healthcare professional.")
-
-                    # Clean up temp file
-                    os.remove(temp_path)
-
-                except Exception as e:
-                    st.error(f"⚠️ Analysis error: {e}")
+            except Exception as e:
+                st.error(f"Analysis error: {e}")
