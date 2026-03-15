@@ -1,3 +1,7 @@
+google-genai
+streamlit
+pillow
+google-genai
 streamlit>=1.36.0
 pillow>=10.3.0
 agno>=0.2.0
